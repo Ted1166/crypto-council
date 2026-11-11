@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, messageOf } from "../lib/api";
+import { api, apiUrl, messageOf } from "../lib/api";
 import type { CaseEvent, CouncilCase } from "../lib/types";
 
 interface Snapshot {
@@ -56,7 +56,7 @@ export function useCase(id: string | undefined, stream = true) {
             };
         }
 
-        const source = new EventSource(`/api/cases/${id}/stream`);
+        const source = new EventSource(apiUrl(`/cases/${id}/stream`));
         source.onopen = () => update((previous) => ({ ...previous, live: true }));
         source.onerror = () => update((previous) => ({ ...previous, live: false }));
         source.onmessage = (message) => {

@@ -1,5 +1,11 @@
 import type { BoardItem, CouncilCase, CrossExam, Health } from "./types";
 
+const API_BASE = String(import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
+
+export function apiUrl(path: string): string {
+    return `${API_BASE}/api${path}`;
+}
+
 export class ApiError extends Error {
     status: number;
 
@@ -10,7 +16,7 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`/api${path}`, {
+    const response = await fetch(apiUrl(path), {
         headers: { "Content-Type": "application/json" },
         ...init,
     });
