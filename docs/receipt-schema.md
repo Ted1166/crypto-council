@@ -46,7 +46,7 @@ Removed claims are kept on the argument as `rejected`, with the reason, so the r
 
 direction is long, short or stand_aside. conviction is 0 to 100. The plan is computed in code, never by the model: entry is the reported price, stop is 1.5 ATR away and target is 3 ATR away, using the price and ATR(14) found in the evidence. If either is missing there is no plan and `plan_note` says why.
 
-Conviction is capped at 60 when the safety check is unavailable, and at 20 when neither advocate produced a surviving claim.
+Conviction is capped at 60 when the safety check was attempted and failed, at 75 when the RYO server offers no safety check at all, and at 20 when neither advocate produced a surviving claim.
 
 ## CrossExam
 

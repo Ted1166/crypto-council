@@ -83,15 +83,14 @@ async def test_cross_examination_reruns_tools_and_flips_the_call(tmp_path, mcp_u
     assert board[0].change_score == 100 and "flipped" in (board[0].change_summary or "")
 
 
-async def test_missing_safety_tool_caps_conviction_and_is_disclosed(tmp_path, bare_mcp_url):
+async def test_unoffered_safety_tool_is_skipped_capped_and_disclosed(tmp_path, bare_mcp_url):
     orchestrator, store, case = await build(tmp_path, bare_mcp_url)
     await orchestrator.run_case(case.id)
     saved = await store.get_case(case.id)
     assert saved is not None and saved.status == "complete"
-    safety = next(item for item in saved.evidence if item.tool == "check_safety")
-    assert safety.status == "unavailable" and safety.data is None
-    assert saved.verdict is not None and saved.verdict.conviction == 60
-    assert any("safety check was unavailable" in note for note in saved.verdict.unresolved)
+    assert [item.tool for item in saved.evidence] == ["market_overview", "analyze_token", "deep_analysis"]
+    assert saved.verdict is not None and saved.verdict.conviction == 75
+    assert any("offers no token safety check" in note for note in saved.verdict.unresolved)
 
 
 async def test_hearing_fails_honestly_when_ryo_is_down(tmp_path):
@@ -102,3 +101,14 @@ async def test_hearing_fails_honestly_when_ryo_is_down(tmp_path):
     assert "no market data" in (saved.error or "")
     assert saved.arguments == [] and saved.verdict is None
     assert all(item.status == "unavailable" for item in saved.evidence)
+
+
+async def test_sentiment_tool_is_used_when_offered(tmp_path, sentiment_mcp_url):
+    orchestrator, store, case = await build(tmp_path, sentiment_mcp_url)
+    await orchestrator.run_case(case.id)
+    saved = await store.get_case(case.id)
+    assert saved is not None and saved.status == "complete"
+    tools = [item.tool for item in saved.evidence]
+    assert tools == ["market_overview", "analyze_token", "deep_analysis", "check_safety", "monitor_market_sentiment_shift"]
+    sentiment = saved.evidence[-1]
+    assert sentiment.status == "ok" and sentiment.data["regime"] == "greed"

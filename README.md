@@ -8,7 +8,7 @@ A bull and a bear argue about a token using only live evidence from RYO's read-o
 
 - Every tool call is stored as numbered evidence (E1, E2 and so on) with its arguments, timestamp and status.
 - Every claim must cite evidence. Every number in a claim is checked against the cited evidence. Claims that fail are removed and recorded with the reason.
-- A tool that fails or is rate limited is recorded as unavailable. Nothing is estimated or filled in. Agents are told what is missing, and the judge lists it as unresolved.
+- A tool that fails or is rate limited is recorded as unavailable. Nothing is estimated or filled in. Agents are told what is missing, and the judge lists it as unresolved. Tools the RYO server does not offer are skipped and disclosed instead of being called.
 - Practice levels (entry, stop, target) are computed in code from the reported price and ATR(14). They are never written by the model.
 - Cases, evidence and events live in SQLite. A restart keeps every receipt, marks unfinished hearings as interrupted, and the event stream resumes from the last event id.
 
@@ -24,7 +24,7 @@ Backend modules: `ryo/` (MCP client, schema adapter, ledger, cache), `agents/` (
 
 ## Run it
 
-Requirements: Python 3.11 or newer, Node 20 or newer.
+Requirements: Python 3.11 or newer, Node 22 or newer.
 
 ```
 cp .env.example .env
@@ -54,6 +54,7 @@ With Docker: `docker compose up --build`, then open http://localhost:8080.
 - RYO transport is `streamable_http` by default. Set `RYO_TRANSPORT=sse` if the server uses SSE.
 - The auth header defaults to `Authorization: Bearer <RYO_API_TOKEN>`. Change `RYO_AUTH_HEADER` and `RYO_AUTH_SCHEME` if the guide specifies otherwise.
 - Tool inputs are mapped from the schemas the server publishes, so argument names are not hard coded.
+- Successful RYO results are cached in SQLite for `RYO_CACHE_TTL_SECONDS` (300 by default) and shown with a cached badge and their original timestamp. This protects the key's call allowance across restarts. Cross-examination always re-runs tools live. Failures are never cached, and an exhausted allowance is reported as unavailable and not retried.
 - `LLM_PROVIDER=anthropic` uses the Anthropic Messages API. Any other value uses an OpenAI compatible chat completions endpoint at `LLM_BASE_URL`.
 
 ## Tests

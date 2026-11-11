@@ -74,3 +74,13 @@ async def test_cache_returns_fresh_ids_but_marks_cached(mcp_url):
 
 def test_expected_tool_list_is_stable():
     assert "check_safety" in EXPECTED_TOOLS and len(EXPECTED_TOOLS) == 8
+
+
+async def test_exhausted_allowance_is_unavailable_and_not_retried(mcp_url):
+    from tests.support.mcp_server import CALLS
+
+    CALLS["exhausted"] = 0
+    settings = settings_for(mcp_url, ryo_max_retries=2)
+    result = await RyoTools(RyoClient(settings), settings).call(Ledger(), "exhausted_tool")
+    assert result.status == "unavailable" and "allowance exhausted" in (result.error or "")
+    assert CALLS["exhausted"] == 1

@@ -13,3 +13,9 @@ def mcp_url():
 def bare_mcp_url():
     with run_server(include_safety=False) as url:
         yield url
+
+
+@pytest.fixture(scope="session")
+def sentiment_mcp_url():
+    with run_server(include_sentiment=True) as url:
+        yield url

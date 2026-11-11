@@ -21,7 +21,7 @@ async def main(symbols: list[str]) -> None:
         raise SystemExit("Set RYO_MCP_URL before seeding.")
     store = Store(settings.database_path)
     await store.init()
-    orchestrator = Orchestrator(settings, RyoTools(RyoClient(settings), settings), llm, store, EventBus())
+    orchestrator = Orchestrator(settings, RyoTools(RyoClient(settings), settings, store), llm, store, EventBus())
     for symbol in symbols:
         case = Case(id=uuid.uuid4().hex[:10], symbol=symbol.upper(), model=llm.name)
         await store.save_case(case)

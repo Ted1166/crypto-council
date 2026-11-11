@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await recover(store)
     bus = EventBus()
     client = RyoClient(settings)
-    tools = RyoTools(client, settings)
+    tools = RyoTools(client, settings, store)
     llm = build_llm(settings)
     orchestrator = Orchestrator(settings, tools, llm, store, bus) if llm else None
     app.state.container = Container(

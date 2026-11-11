@@ -75,21 +75,28 @@ class Orchestrator:
     async def _debate(self, case: Case) -> None:
         ledger = Ledger(case.evidence)
         await self._emit(case.id, "stage", f"Collecting live evidence for {case.symbol}")
-        results = await asyncio.gather(
+        offered = await self._tools.offered()
+        calls = [
             self._tools.market_overview(ledger),
             self._tools.analyze_token(ledger, case.symbol),
             self._tools.deep_analysis(ledger, case.symbol),
-            self._tools.check_safety(ledger, case.symbol),
-        )
+        ]
+        if "check_safety" in offered:
+            calls.append(self._tools.check_safety(ledger, case.symbol))
+        if "monitor_market_sentiment_shift" in offered:
+            calls.append(self._tools.sentiment_shift(ledger))
+        results = await asyncio.gather(*calls)
         case.evidence = ledger.all()
         await self._store.save_case(case)
         for result in results:
             await self._emit(case.id, "evidence", _evidence_line(result))
         if ledger.latest_ok("analyze_token", "deep_analysis") is None:
+            reasons = [item.error for item in results if item.status != "ok" and item.error]
+            detail = f" RYO said: {reasons[0]}" if reasons else ""
             await self._fail(
                 case,
-                "RYO returned no market data for this token, so there is nothing to argue from. "
-                "The failed calls are listed under evidence.",
+                "RYO returned no market data for this token, so there is nothing to argue from."
+                f"{detail} The failed calls are listed under evidence.",
             )
             return
 

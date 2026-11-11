@@ -9,6 +9,7 @@ from app.receipts.schema import Argument, Verdict
 from app.ryo.ledger import Ledger
 
 SAFETY_CAP = 60
+UNASSESSED_SAFETY_CAP = 75
 NO_CLAIMS_CAP = 20
 
 
@@ -72,8 +73,16 @@ async def judge(
         conviction = min(conviction, NO_CLAIMS_CAP)
         unresolved.append("Neither advocate produced a claim that survived the evidence check.")
     if not ledger.has_ok("check_safety"):
-        conviction = min(conviction, SAFETY_CAP)
-        unresolved.append(f"The safety check was unavailable, so conviction is capped at {SAFETY_CAP}.")
+        attempted = any(item.tool == "check_safety" for item in ledger.all())
+        if attempted:
+            conviction = min(conviction, SAFETY_CAP)
+            unresolved.append(f"The safety check was unavailable, so conviction is capped at {SAFETY_CAP}.")
+        else:
+            conviction = min(conviction, UNASSESSED_SAFETY_CAP)
+            unresolved.append(
+                "RYO offers no token safety check, so contract and scam risk was not assessed "
+                f"and conviction is capped at {UNASSESSED_SAFETY_CAP}."
+            )
     decisive = [item for item in draft.decisive_evidence if (found := ledger.get(item)) and found.status == "ok"]
     plan, plan_note = build_plan(direction, ledger)
     return Verdict(

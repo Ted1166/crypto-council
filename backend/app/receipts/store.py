@@ -5,7 +5,7 @@ from contextlib import closing
 from datetime import datetime
 
 from app.receipts.schema import BoardItem, Case, Event
-from app.ryo.result import utcnow
+from app.ryo.result import ToolResult, utcnow
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS cases (
@@ -20,6 +20,11 @@ CREATE TABLE IF NOT EXISTS cases (
     change_summary TEXT,
     crossexam_count INTEGER NOT NULL DEFAULT 0,
     has_running_exam INTEGER NOT NULL DEFAULT 0,
+    payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tool_cache (
+    key TEXT PRIMARY KEY,
+    stored_at TEXT NOT NULL,
     payload TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS events (
@@ -162,6 +167,26 @@ class Store:
             for row in rows
         ]
 
+    def _get_tool_cache(self, key: str, max_age_seconds: float) -> ToolResult | None:
+        with closing(self._connect()) as connection:
+            row = connection.execute(
+                "SELECT stored_at, payload FROM tool_cache WHERE key = ?", (key,)
+            ).fetchone()
+        if row is None:
+            return None
+        age = (utcnow() - datetime.fromisoformat(row["stored_at"])).total_seconds()
+        if age > max_age_seconds:
+            return None
+        return ToolResult.model_validate_json(row["payload"])
+
+    def _put_tool_cache(self, key: str, result: ToolResult) -> None:
+        with closing(self._connect()) as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO tool_cache (key, stored_at, payload) VALUES (?, ?, ?)",
+                (key, utcnow().isoformat(), result.model_dump_json()),
+            )
+            connection.commit()
+
     async def init(self) -> None:
         await asyncio.to_thread(self._init)
 
@@ -184,3 +209,9 @@ class Store:
 
     async def events_after(self, case_id: str, seq: int) -> list[Event]:
         return await asyncio.to_thread(self._events_after, case_id, seq)
+
+    async def get_tool_cache(self, key: str, max_age_seconds: float) -> ToolResult | None:
+        return await asyncio.to_thread(self._get_tool_cache, key, max_age_seconds)
+
+    async def put_tool_cache(self, key: str, result: ToolResult) -> None:
+        await asyncio.to_thread(self._put_tool_cache, key, result)

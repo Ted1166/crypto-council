@@ -14,7 +14,8 @@ from app.config import Settings
 
 Status = Literal["ok", "unavailable", "error"]
 
-RATE_LIMIT_MARKERS = ("rate limit", "rate-limit", "rate_limit", "429", "too many requests", "quota")
+RATE_LIMIT_MARKERS = ("rate limit", "rate-limit", "rate_limit", "429", "too many requests")
+ALLOWANCE_MARKERS = ("allowance", "quota", "exhausted")
 
 
 class RyoUnavailable(Exception):
@@ -27,6 +28,7 @@ class Outcome:
     data: Any = None
     error: str | None = None
     latency_ms: int = 0
+    retryable: bool = True
 
 
 def describe(exc: BaseException) -> str:
@@ -121,6 +123,8 @@ class RyoClient:
         if result.isError:
             message = " ".join(parts).strip() or "the tool reported an error"
             lowered = message.lower()
+            if any(marker in lowered for marker in ALLOWANCE_MARKERS):
+                return Outcome("unavailable", error=message[:500], retryable=False)
             status: Status = "unavailable" if any(m in lowered for m in RATE_LIMIT_MARKERS) else "error"
             return Outcome(status, error=message[:500])
         structured = getattr(result, "structuredContent", None)
@@ -145,7 +149,7 @@ class RyoClient:
                     await asyncio.sleep(0.6 * 2**attempt)
                 continue
             outcome = self._interpret(result)
-            if outcome.status == "unavailable" and attempt < attempts - 1:
+            if outcome.status == "unavailable" and outcome.retryable and attempt < attempts - 1:
                 last_error = outcome.error or last_error
                 await asyncio.sleep(0.6 * 2**attempt)
                 continue

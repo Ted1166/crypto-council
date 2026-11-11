@@ -8,13 +8,16 @@ import uvicorn
 from mcp.server.fastmcp import FastMCP
 
 
+CALLS = {"exhausted": 0}
+
+
 def free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         return sock.getsockname()[1]
 
 
-def build_server(port: int, include_safety: bool = True) -> FastMCP:
+def build_server(port: int, include_safety: bool = True, include_sentiment: bool = False) -> FastMCP:
     server = FastMCP("protocol-test-server", host="127.0.0.1", port=port)
 
     @server.tool()
@@ -49,6 +52,11 @@ def build_server(port: int, include_safety: bool = True) -> FastMCP:
         raise RuntimeError("scanner exploded")
 
     @server.tool()
+    def exhausted_tool() -> dict:
+        CALLS["exhausted"] += 1
+        raise RuntimeError("MCP call allowance exhausted. Check your allowance before retrying.")
+
+    @server.tool()
     def supported_tokens() -> dict:
         raise RuntimeError("429 too many requests")
 
@@ -58,13 +66,19 @@ def build_server(port: int, include_safety: bool = True) -> FastMCP:
         def check_safety(symbol: str) -> dict:
             return {"symbol": symbol, "risk_level": "low", "flags": []}
 
+    if include_sentiment:
+
+        @server.tool()
+        def monitor_market_sentiment_shift() -> dict:
+            return {"regime": "greed", "fear_greed_7d_change": 6.5, "phase": "late_uptrend"}
+
     return server
 
 
 @contextmanager
-def run_server(include_safety: bool = True) -> Iterator[str]:
+def run_server(include_safety: bool = True, include_sentiment: bool = False) -> Iterator[str]:
     port = free_port()
-    app = build_server(port, include_safety).streamable_http_app()
+    app = build_server(port, include_safety, include_sentiment).streamable_http_app()
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)

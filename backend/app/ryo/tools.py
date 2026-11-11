@@ -3,6 +3,7 @@ import time
 from typing import Any
 
 from app.config import Settings
+from app.receipts.store import Store
 from app.ryo.adapter import ArgumentMappingError, adapt
 from app.ryo.client import RyoClient, RyoUnavailable
 from app.ryo.ledger import Ledger
@@ -25,10 +26,11 @@ OPTIONAL_INPUTS: dict[str, frozenset[str]] = {
 
 
 class RyoTools:
-    def __init__(self, client: RyoClient, settings: Settings) -> None:
+    def __init__(self, client: RyoClient, settings: Settings, store: Store | None = None) -> None:
         self._client = client
         self._ttl = settings.ryo_cache_ttl_seconds
-        self._cache: dict[str, tuple[float, ToolResult]] = {}
+        self._store = store
+        self._memory: dict[str, tuple[float, ToolResult]] = {}
 
     async def offered(self) -> dict[str, dict[str, Any]]:
         try:
@@ -41,6 +43,24 @@ class RyoTools:
         ledger.add(result)
         return result
 
+    async def _lookup(self, key: str) -> ToolResult | None:
+        if self._ttl <= 0:
+            return None
+        if self._store is not None:
+            return await self._store.get_tool_cache(key, self._ttl)
+        entry = self._memory.get(key)
+        if entry and time.monotonic() - entry[0] <= self._ttl:
+            return entry[1]
+        return None
+
+    async def _remember(self, key: str, result: ToolResult) -> None:
+        if self._ttl <= 0:
+            return
+        if self._store is not None:
+            await self._store.put_tool_cache(key, result)
+        else:
+            self._memory[key] = (time.monotonic(), result)
+
     async def call(
         self,
         ledger: Ledger,
@@ -50,6 +70,11 @@ class RyoTools:
     ) -> ToolResult:
         canonical = dict(canonical or {})
         result_id = ledger.reserve()
+        key = f"{tool}:{json.dumps(canonical, sort_keys=True, default=str)}"
+        if not fresh:
+            stored = await self._lookup(key)
+            if stored is not None:
+                return self._record(ledger, stored.model_copy(update={"id": result_id, "cached": True}))
         try:
             offered = await self._client.tools()
         except RyoUnavailable as exc:
@@ -82,11 +107,6 @@ class RyoTools:
                     error=f"arguments could not be mapped to the tool schema: {exc}",
                 ),
             )
-        key = f"{tool}:{json.dumps(arguments, sort_keys=True, default=str)}"
-        if not fresh and key in self._cache:
-            stored_at, stored = self._cache[key]
-            if time.monotonic() - stored_at <= self._ttl:
-                return self._record(ledger, stored.model_copy(update={"id": result_id, "cached": True}))
         outcome = await self._client.call(tool, arguments)
         result = ToolResult(
             id=result_id,
@@ -98,7 +118,7 @@ class RyoTools:
             latency_ms=outcome.latency_ms,
         )
         if outcome.status == "ok":
-            self._cache[key] = (time.monotonic(), result)
+            await self._remember(key, result)
         return self._record(ledger, result)
 
     async def market_overview(self, ledger: Ledger, fresh: bool = False) -> ToolResult:

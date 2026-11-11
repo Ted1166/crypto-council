@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     ryo_auth_scheme: str = "Bearer"
     ryo_timeout_seconds: float = 30.0
     ryo_max_retries: int = 2
-    ryo_cache_ttl_seconds: float = 20.0
+    ryo_cache_ttl_seconds: float = 300.0
     ryo_max_concurrency: int = 4
 
     llm_provider: str = "anthropic"
